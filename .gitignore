@@ -1,0 +1,62 @@
+# Operating system / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Native / CUDA build artifacts
+build/
+build_*/
+dist/
+*.egg-info/
+*.so
+*.o
+*.obj
+submodules/raytracing/eigen-*/
+
+# Datasets, training outputs, and rendered results
+data/
+dataset/
+output/
+outputs/
+outputs_*/
+logs/
+*.log
+
+# Large model checkpoints and generated media
+*.pth
+*.pt
+*.ckpt
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+
+# COLMAP / reconstruction intermediates outside ignored dataset folders
+**/database.db
+**/distorted/
+
+# Generated Gaussian point-cloud sidecars
+**/point_cloud/iteration_*/point_cloud*.map
+
+# Generated environment-map variants and previews. The three tracked base
+# maps under assets/env_map/ remain tracked even if the pattern matches them.
+assets/env_map/bw/
+assets/env_map/*.exr
+assets/env_map/*preview.png
+
+# Vendored external robot assets copied into this checkout
+# SO-ARM100/
