@@ -27,6 +27,7 @@ import argparse
 import os
 import struct
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import numpy as np
 import trimesh
@@ -34,9 +35,14 @@ import pyrender
 from PIL import Image
 from trimesh.transformations import euler_matrix, quaternion_from_matrix
 
-URDF = "/amax/home/fengshuangyu/relighting/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"
+ROOT = Path(__file__).resolve().parents[1]
+URDF_PATHS = (
+    ROOT / "SO-ARM100/Simulation/SO101/so101_new_calib.urdf",
+    ROOT.parent / "SO-ARM100/Simulation/SO101/so101_new_calib.urdf",
+)
+URDF = str(next((path for path in URDF_PATHS if path.is_file()), URDF_PATHS[0]))
 ASSETS = os.path.join(os.path.dirname(URDF), "assets")
-DEFAULT_OUT = "/amax/home/fengshuangyu/relighting/IRGS/dataset/so101_links"
+DEFAULT_OUT = str(ROOT / "dataset/so101_links")
 
 COLORS = {
     "3d_printed": np.array([1.0, 0.82, 0.12]),   # 黄

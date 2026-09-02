@@ -26,12 +26,14 @@ import argparse
 import os
 import sys
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import numpy as np
 import torch
 
-sys.path.insert(0, "/amax/home/fengshuangyu/relighting/IRGS")
-os.chdir("/amax/home/fengshuangyu/relighting/IRGS")  # refl_utils 读相对路径 assets/bsdf_256_256.bin
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+os.chdir(ROOT)  # refl_utils 读相对路径 assets/bsdf_256_256.bin
 import torch.nn.functional as F
 from trimesh.transformations import euler_matrix, rotation_matrix
 
@@ -41,9 +43,13 @@ from scene.light import EnvLight
 from scene.gaussian_model import GaussianModel
 from utils.graphics_utils import getProjectionMatrix
 
-URDF = "/amax/home/fengshuangyu/relighting/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"
+URDF_PATHS = (
+    ROOT / "SO-ARM100/Simulation/SO101/so101_new_calib.urdf",
+    ROOT.parent / "SO-ARM100/Simulation/SO101/so101_new_calib.urdf",
+)
+URDF = str(next((path for path in URDF_PATHS if path.is_file()), URDF_PATHS[0]))
 ASSETS = os.path.join(os.path.dirname(URDF), "assets")
-OUT_ROOT = "/amax/home/fengshuangyu/relighting/IRGS/outputs/so101_links"
+OUT_ROOT = str(ROOT / "outputs/so101_links")
 PLY_ROOT = OUT_ROOT  # outputs/so101_links/<link>/irgs_full/point_cloud/iteration_20000/point_cloud.ply
 ALL_LINKS = ["base_link", "shoulder_link", "upper_arm_link", "lower_arm_link",
              "wrist_link", "gripper_link", "moving_jaw_so101_v1_link"]
