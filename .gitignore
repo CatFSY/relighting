@@ -59,4 +59,4 @@ assets/env_map/*.exr
 assets/env_map/*preview.png
 
 # Vendored external robot assets copied into this checkout
-# SO-ARM100/
+SO-ARM100/
