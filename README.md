@@ -65,14 +65,3 @@ CUDA_VISIBLE_DEVICES=0 python relight_assembled.py \
   --trajectory-env-deg-per-sec 90 \
   --out outputs/guiji2_relight_envrotate
 ```
-
-## 📜 BibTeX
-```bibtex
-@inproceedings{gu2024IRGS,
-  title={IRGS: Inter-Reflective Gaussian Splatting with 2D Gaussian Ray Tracing},
-  author={Gu, Chun and Wei, Xiaofei and Zeng, Zixuan and Yao, Yuxuan and Zhang, Li},
-  booktitle={CVPR},
-  year={2025},
-}
-```
-# relighting
