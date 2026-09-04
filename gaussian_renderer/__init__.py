@@ -54,6 +54,20 @@ def _new_timing_profile(enabled):
     return {"stages_ms": {}, "stage_calls": {}, "metadata": {}}
 
 
+def prepare_ir_raster_context(pc):
+    """Activate camera-independent raster inputs once for multi-pass inference."""
+    return {
+        "means3D": pc.get_xyz,
+        "opacity": pc.get_opacity,
+        "base_color": pc.get_base_color,
+        "roughness": pc.get_rough,
+        "metallic": pc.get_metallic,
+        "scales": pc.get_scaling,
+        "rotations": pc.get_rotation,
+        "shs": pc.get_features,
+    }
+
+
 def _query_fg_lut(fg_lut, fg_uv, pipe):
     """Query the split-sum GGX LUT using one 2-D UV grid.
 
@@ -151,12 +165,17 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
               override_normal_map=None, force_visibility_one=False,
               visibility_origin_mode="incident",
               visibility_origin_epsilon=None, profile_timing=False,
-              raster_opacity_override=None, ambient_light=None):
+              raster_opacity_override=None, ambient_light=None,
+              raster_context=None, shading_mask_override=None):
     timing_profile = _new_timing_profile(profile_timing)
+    if raster_context is None:
+        raster_context = prepare_ir_raster_context(pc)
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
-    screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
+    screenspace_points = torch.zeros_like(
+        raster_context["means3D"], requires_grad=training) + 0
     try:
-        screenspace_points.retain_grad()
+        if training:
+            screenspace_points.retain_grad()
     except:
         pass
 
@@ -184,9 +203,9 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
-    means3D = pc.get_xyz
+    means3D = raster_context["means3D"]
     means2D = screenspace_points
-    opacity = pc.get_opacity
+    opacity = raster_context["opacity"]
     # Inference-only camera visibility override.  This intentionally affects
     # only Gaussian rasterization: ray-traced lighting and shadows continue to
     # use the complete scene through ``pc``.  It is useful for rendering
@@ -200,15 +219,15 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
         opacity = raster_opacity_override.to(
             device=opacity.device, dtype=opacity.dtype)
     
-    base_color = pc.get_base_color
-    roughness = pc.get_rough
-    metallic = pc.get_metallic
+    base_color = raster_context["base_color"]
+    roughness = raster_context["roughness"]
+    metallic = raster_context["metallic"]
     
-    scales = pc.get_scaling
-    rotations = pc.get_rotation
+    scales = raster_context["scales"]
+    rotations = raster_context["rotations"]
     cov3D_precomp = None
     
-    shs = pc.get_features
+    shs = raster_context["shs"]
     colors_precomp = None
     
     features = torch.cat([base_color, roughness, metallic], dim=-1)
@@ -236,14 +255,18 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
     render_normal = allmap[2:5]
     render_normal = (render_normal.permute(1,2,0) @ (viewpoint_camera.world_view_transform[:3,:3].T)).permute(2,0,1)
     
-    # Channel 5 is the second moment; true median depth is appended at 7.
-    render_depth_median = allmap[7:8]
-    render_depth_median = torch.nan_to_num(render_depth_median, 0, 0)
-    
     # get expected depth map
     render_depth_expected = allmap[0:1]
     render_depth_expected = (render_depth_expected / render_alpha)
     render_depth_expected = torch.nan_to_num(render_depth_expected, 0, 0)
+
+    # Newer rasterizers append true median depth at channel 7.  The CUDA
+    # extension installed in older IRGS environments exposes only the original
+    # seven G-buffer channels, so fall back to expected depth in that case.
+    if allmap.shape[0] > 7:
+        render_depth_median = torch.nan_to_num(allmap[7:8], 0, 0)
+    else:
+        render_depth_median = render_depth_expected
     
     # get depth distortion map
     render_dist = allmap[6:7]
@@ -352,6 +375,12 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
             mask = render_alpha[0] > 0
     else:
         mask = render_alpha[0] > 0
+    if shading_mask_override is not None:
+        if shading_mask_override.shape != mask.shape:
+            raise ValueError(
+                "shading_mask_override must have shape "
+                f"{tuple(mask.shape)}, got {tuple(shading_mask_override.shape)}")
+        mask = mask & shading_mask_override.to(device=mask.device, dtype=torch.bool)
         
     rays_d = viewpoint_camera.rays_d_hw
     w_o = -rays_d

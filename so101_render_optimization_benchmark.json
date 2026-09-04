@@ -1,0 +1,61 @@
+{
+  "schema": "SO101_IRGS_OPTIMIZATION_BENCHMARK_V1",
+  "benchmark": {
+    "episode": "batch_01/episode_000688",
+    "camera": "main",
+    "source_stride": 10,
+    "output_fps": 30.0,
+    "resolution": [960, 540],
+    "frame_selection": "last 60 sampled trajectory frames",
+    "gpu": "NVIDIA GeForce RTX 4090 (physical GPU 6)",
+    "bounding_polyhedron": "icosphere320",
+    "light_type": "area",
+    "analytic_light_samples": 64,
+    "depth_occlusion": "strict two-layer compositing",
+    "video_streaming": true,
+    "ffmpeg_preset": "veryfast",
+    "frame_labels": false
+  },
+  "before": {
+    "recorded_at_utc": "2026-09-04T13:21:41Z",
+    "renderer_sha256": "89e6ce1ada646ff2732fef46d6b716d991bd30b026c86a182529e355785f9217",
+    "gaussian_renderer_sha256": "aa212c08c8eceab9211742080eb802a3bc0cf30294aabc16421d3f96834083e7",
+    "frame_count": 60,
+    "elapsed_s": 11.27302754484117,
+    "effective_fps": 5.322438871131611,
+    "average_render_cuda_ms": 129.8496098836263,
+    "average_pipeline_ms": 180.57470815256238,
+    "average_bvh_ms": 6.895388942211866,
+    "average_output_ms": 3.6688526161015034,
+    "report": "/tmp/irgs_before_688_main_60/video_report.json"
+  },
+  "after": {
+    "recorded_at_utc": "2026-09-04T13:45:33Z",
+    "renderer_sha256": "81b54d207bf90a8d37ab6ebc41b1b2724e91e6047eb6121703f5161034530adc",
+    "gaussian_renderer_sha256": "d4ed6a139fa5a2f978996fd07032479e020f8365ad0898ad580758906a6a5887",
+    "frame_count": 60,
+    "elapsed_s": 7.880420630797744,
+    "effective_fps": 7.6138067764443855,
+    "average_render_cuda_ms": 118.60518608093261,
+    "average_pipeline_ms": 129.0878031713267,
+    "average_bvh_ms": 6.504194779942433,
+    "average_output_ms": 1.4263247139751911,
+    "geometry_update_mode": "gpu",
+    "depth_compositing_render_mode": "legacy-two-pass",
+    "report": "/tmp/irgs_after_final_688_main_60/video_report.json"
+  },
+  "comparison": {
+    "elapsed_time_reduction_percent": 30.094904856290995,
+    "throughput_increase_percent": 43.051089186593195,
+    "pipeline_time_reduction_percent": 28.512799775778053,
+    "render_cuda_time_reduction_percent": 8.6595745745953,
+    "encoded_video_psnr_db": 59.828227,
+    "three_frame_raw_validation": {
+      "steps": [0, 1500, 3044],
+      "psnr_db": ["inf", 81.63507137995255, 93.23625371074522],
+      "changed_pixels": [0, 64, 42],
+      "total_pixels_per_frame": 518400,
+      "maximum_channel_difference": [0, 15, 1]
+    }
+  }
+}

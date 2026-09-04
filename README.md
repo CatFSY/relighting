@@ -387,6 +387,88 @@ CUDA_VISIBLE_DEVICES=0 python relight_assembled.py \
 
 `--table-ply` 和 `--object-ply` 可以指向具体 PLY，也可以指向 IRGS 输出目录；程序会自动寻找最新的 `point_cloud.ply`。
 
+对于 SO101 data-engine v3 的 batch/episode 交接格式，直接把交接根目录传给
+[`render_so101_irgs_handoff.py`](render_so101_irgs_handoff.py)：
+
+```bash
+/amax/home/fengshuangyu/miniconda3/envs/irgs/bin/python \
+  render_so101_irgs_handoff.py \
+  /path/to/so101_data_engine_v3_1000ep_mixed_pose_v0
+```
+
+该入口自动发现 `batch_*/trajectory_handoff_manifest.json`，读取每条 episode 的
+contract、坐标变换和完整或 `.partial.csv` 轨迹，并使用 `common/assets` 下的共享
+IRGS 资产。实现始终来自当前 `relighting` checkout，不读取或执行交接目录中的
+`common/irgs_runtime`。输出默认写入对应 episode 目录下：
+
+```text
+<handoff_root>/batch_01/episodes/episode_000000/video/
+├── main/
+│   ├── so101_table_cup_trajectory_irgs.mp4
+│   └── video_report.json
+└── contact/
+    ├── so101_table_cup_trajectory_contact_camera_irgs.mp4
+    └── video_report.json
+```
+
+也可以用 `--output-root` 指定集中式视频根目录。一个 camera 的视频与
+`video_report.json` 同时存在时视为已经完成，后续运行会自动跳过。正式 handoff
+默认直接把 RGB 帧流送给 ffmpeg，不会写入 `video_frames/`，避免 PNG 写盘和再次读取；
+只有显式传入 `--keep-video-frames` 才使用 PNG 中间帧。多卡 worker 日志写入
+`<handoff_root>/render_logs/`。
+
+每个 GPU worker 默认使用常驻 renderer：首次任务读取共享 PLY、上传 Gaussian 并构建
+rigid IAS，后续 episode/camera 只读取轨迹、contract 和灯光配置，再更新动态几何、相机
+与光源。缓存使用资产路径、mtime、变换矩阵和 Gaussian 数量组成的签名；签名变化时会
+安全重建。需要诊断隔离问题时可用 `--subprocess-per-video` 恢复每个视频独立进程。
+
+正式视频还默认在 GPU 上先量化到 RGB8，以 4 帧异步队列送入
+`libx264 -preset veryfast`，并关闭逐帧 step/timing 文字。可分别用
+`--video-queue-size`、`--ffmpeg-preset` 和 `--keep-frame-labels` 覆盖这些设置。
+
+建议先做全量无写入预检，再按需限制 batch、episode 或相机：
+
+```bash
+IRGS_PYTHON=/amax/home/fengshuangyu/miniconda3/envs/irgs/bin/python
+HANDOFF=/path/to/so101_data_engine_v3_1000ep_mixed_pose_v0
+
+"$IRGS_PYTHON" render_so101_irgs_handoff.py "$HANDOFF" --preflight-only
+
+"$IRGS_PYTHON" render_so101_irgs_handoff.py "$HANDOFF" \
+  --batch 1 --episode-id episode_000000 --camera main --gpu 0
+```
+
+`--worker-index/--worker-count` 可用于多卡分片，`--output-root` 可把结果写到数据集
+之外，`--rerender` 可强制覆盖断点跳过逻辑。默认配置是 stride 10、输出 30 fps、DS32、LS32、
+解析光源采样 64 和 `icosphere320`。正式入口还默认启用来自 `relight_single.py`
+的深度遮挡合成：利用已知的 Gaussian 排列把桌面与“机器人+物体”分别 rasterize，
+根据两层 `surf_depth`/alpha 修正前景覆盖，同时让两次光照与阴影查询都看到完整场景。
+正式入口默认使用 `--table-occlusion-mode strict`：只有前景 alpha≥0.95 且与桌面的
+深度间隔处于 `0.001m < gap ≤ 0.015m` 的近距离高可信像素才做完整覆盖；边界、
+不确定区域以及深度相距较远的像素，修正权重均为 0，直接走普通 alpha 合成。需要旧行为时可显式选择 `--table-occlusion-mode smooth`
+或 `hard`，也可用 `--no-depth-occlude-table` 做整体旧版合成对照；显存不足时可显式
+使用 `--bounding-polyhedron icosphere80`。
+
+多卡正式渲染可以直接使用：
+
+```bash
+cd /amax/home/fengshuangyu/relighting/relighting
+
+./render_so101_irgs_multi_gpu.sh "$HANDOFF" 0,1,2,3
+```
+
+第二个参数是逗号分隔的物理 GPU 编号；也可以通过 `GPUS=0,1,2,3` 设置。脚本为
+每张卡启动一个确定性分片 worker，日志写到 `render_logs/`。按 Ctrl-C 会停止所有
+worker 及其当前 CUDA 子进程；再次执行完全相同的命令即可续跑，已经完成的 camera
+不会重新渲染。worker 的 `[render]`/`[done]` 状态会实时打印到终端，同时写入各自的
+日志。每次退出（正常完成、worker 失败或 Ctrl-C）都会在 `render_logs/render_metrics.json`
+保存逐视频的 GPU、帧数、运行时间、处理帧率，以及总体和按 GPU 的平均值；中断的视频会保留
+已从日志确认的帧数和截至中断时刻的运行时间。例如只渲染 main camera：
+
+```bash
+./render_so101_irgs_multi_gpu.sh "$HANDOFF" 4,5,6,7 --camera main
+```
+
 ## 8. 输出目录
 
 ```text
