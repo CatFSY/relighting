@@ -166,7 +166,8 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
               visibility_origin_mode="incident",
               visibility_origin_epsilon=None, profile_timing=False,
               raster_opacity_override=None, ambient_light=None,
-              raster_context=None, shading_mask_override=None):
+              raster_context=None, shading_mask_override=None,
+              trace_context=None, minimal_output=False):
     timing_profile = _new_timing_profile(profile_timing)
     if raster_context is None:
         raster_context = prepare_ir_raster_context(pc)
@@ -409,7 +410,8 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
             force_visibility_one=force_visibility_one,
             visibility_origin_mode=visibility_origin_mode,
             visibility_origin_epsilon=visibility_origin_epsilon,
-            timing_profile=timing_profile)
+            timing_profile=timing_profile,
+            trace_context=trace_context)
     else:
         render_results = rendering_equation_chunk(
             rendered_base_color.permute(1, 2, 0)[mask],
@@ -424,7 +426,8 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
             force_visibility_one=force_visibility_one,
             visibility_origin_mode=visibility_origin_mode,
             visibility_origin_epsilon=visibility_origin_epsilon,
-            timing_profile=timing_profile)
+            timing_profile=timing_profile,
+            trace_context=trace_context)
         
     timing_event = _profile_cuda_start(timing_profile)
     diffuse = render_results['diffuse']
@@ -456,6 +459,18 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
     rendered_specular = rendered_specular.permute(2, 0, 1)
     rendered_full = rgb_to_srgb(rendered_diffuse + rendered_specular)
     final_image = rendered_full * render_alpha + bg_color[:, None, None] * (1 - render_alpha)
+
+    if minimal_output:
+        results = {
+            "render": final_image,
+            "mask": mask,
+            "rend_alpha": render_alpha,
+            "surf_depth": surf_depth,
+        }
+        _profile_cuda_stop(timing_profile, "composition", timing_event)
+        if timing_profile is not None:
+            results["timing_profile"] = timing_profile
+        return results
         
     final_image_sh = rgb_to_srgb(rendered_image) + bg_color[:, None, None] * (1 - render_alpha)
     
@@ -596,12 +611,13 @@ def rendering_equation_chunk(base_color, roughness, metallic, normal, position, 
         if kwargs.get("use_metallic_brdf", False):
             trace_fields.append(pc.get_metallic)
         trace_features = torch.cat(trace_fields, dim=1)
-    kwargs["trace_context"] = pc.prepare_trace_context(
-        camera_center=camera_center,
-        trace_mode=trace_mode,
-        use_metallic=kwargs.get("use_metallic_brdf", False),
-        features=trace_features,
-    )
+    if kwargs.get("trace_context") is None:
+        kwargs["trace_context"] = pc.prepare_trace_context(
+            camera_center=camera_center,
+            trace_mode=trace_mode,
+            use_metallic=kwargs.get("use_metallic_brdf", False),
+            features=trace_features,
+        )
     kwargs["trace_mode_override"] = (
         "full" if force_full_relight_trace else None)
     if base_color.shape[0] <= chunk_size:

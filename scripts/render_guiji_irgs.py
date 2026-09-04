@@ -1900,18 +1900,9 @@ def main(argv=None):
         "uniform_metallic": args.uniform_metallic,
     }
 
-    table_raster_opacity = None
-    foreground_raster_opacity = None
     table_gaussian_count = len(table_world["xyz"])
     foreground_gaussian_count = len(first_scene["xyz"]) - table_gaussian_count
     if args.depth_occlude_table:
-        full_opacity = model.get_opacity.detach()
-        table_raster_opacity = torch.zeros_like(full_opacity)
-        foreground_raster_opacity = torch.zeros_like(full_opacity)
-        table_raster_opacity[:table_gaussian_count] = \
-            full_opacity[:table_gaussian_count]
-        foreground_raster_opacity[table_gaussian_count:] = \
-            full_opacity[table_gaussian_count:]
         transition_description = (
             f"alpha={args.occlusion_alpha_low:.3f}.."
             f"{args.occlusion_alpha_high:.3f}, "
@@ -1953,6 +1944,18 @@ def main(argv=None):
             return render_ir(
                 camera, model, pipe, background, **render_kwargs), 0.0
 
+        full_raster_context = render_kwargs["raster_context"]
+        table_render_kwargs = dict(render_kwargs)
+        foreground_render_kwargs = dict(render_kwargs)
+        table_render_kwargs["raster_context"] = {
+            key: value[:table_gaussian_count]
+            for key, value in full_raster_context.items()
+        }
+        foreground_render_kwargs["raster_context"] = {
+            key: value[table_gaussian_count:]
+            for key, value in full_raster_context.items()
+        }
+
         selective_render = args.depth_compositing_render_mode == "selective"
         if selective_render:
             # These two inexpensive passes provide only per-layer alpha/depth.
@@ -1961,21 +1964,17 @@ def main(argv=None):
             # relighting.
             foreground_package = render_ir(
                 camera, model, pipe, foreground_background,
-                raster_opacity_override=foreground_raster_opacity,
-                material_only=True, **render_kwargs)
+                material_only=True, **foreground_render_kwargs)
             table_package = render_ir(
                 camera, model, pipe, background,
-                raster_opacity_override=table_raster_opacity,
-                material_only=True, **render_kwargs)
+                material_only=True, **table_render_kwargs)
         else:
             foreground_package = render_ir(
                 camera, model, pipe, foreground_background,
-                raster_opacity_override=foreground_raster_opacity,
-                **render_kwargs)
+                **foreground_render_kwargs)
             table_package = render_ir(
                 camera, model, pipe, background,
-                raster_opacity_override=table_raster_opacity,
-                **render_kwargs)
+                **table_render_kwargs)
         foreground_alpha = foreground_package["rend_alpha"]
         table_alpha = table_package["rend_alpha"]
         foreground_depth = foreground_package["surf_depth"]
@@ -2038,9 +2037,8 @@ def main(argv=None):
                 camera, model, pipe, background, **render_kwargs)
             correction_package = render_ir(
                 camera, model, pipe, foreground_background,
-                raster_opacity_override=foreground_raster_opacity,
                 shading_mask_override=correction_confidence[0] > 0.0,
-                **render_kwargs)
+                **foreground_render_kwargs)
             foreground_straight = (
                 correction_package["render"]
                 / foreground_alpha.clamp_min(1e-6)
@@ -2211,6 +2209,19 @@ def main(argv=None):
             camera = make_camera(camera_angle)
         frame_render_kwargs = dict(common_render_kwargs)
         frame_render_kwargs["raster_context"] = prepare_ir_raster_context(model)
+        trace_mode = (
+            "visibility"
+            if model.direct_light is not None or pipe.wo_indirect_relight
+            else "material"
+        )
+        with torch.no_grad():
+            frame_render_kwargs["trace_context"] = model.prepare_trace_context(
+                camera_center=camera.camera_center,
+                trace_mode=trace_mode,
+                use_metallic=getattr(pipe, "use_metallic_brdf", False),
+            )
+        frame_render_kwargs["minimal_output"] = (
+            args.output_buffer == "render" and not args.save_compositing_debug)
         if args.normal_source == "depth":
             frame_render_kwargs["override_normal_map"] = (
                 fixed_depth_normal
@@ -2521,6 +2532,16 @@ def main(argv=None):
         },
         "light_t_min_scene_units": args.light_t_min,
         "profile_timing_enabled": args.profile_timing,
+        "python_render_optimizations": {
+            "gpu_rigid_geometry_update": args.geometry_update_mode == "gpu",
+            "layer_raster_uses_gaussian_subsets": bool(
+                args.depth_occlude_table),
+            "shared_trace_context_per_frame": True,
+            "minimal_output": (
+                args.output_buffer == "render" and
+                not args.save_compositing_debug),
+            "table_gbuffer_cached": False,
+        },
         "depth_aware_table_occlusion": {
             "enabled": bool(args.depth_occlude_table),
             "mode": args.table_occlusion_mode if args.depth_occlude_table else None,

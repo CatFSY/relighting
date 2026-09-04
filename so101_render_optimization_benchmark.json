@@ -57,5 +57,38 @@
       "total_pixels_per_frame": 518400,
       "maximum_channel_difference": [0, 15, 1]
     }
+  },
+  "python_layer_optimization": {
+    "recorded_at_utc": "2026-09-04T14:00:54Z",
+    "renderer_sha256_before_metadata_only_change": "c453bb1fc29a8964ca32694fbde20fccfb01d4a1929fa4940fc815a3a05d0268",
+    "renderer_sha256_final": "5b0beb72b01d45dfff7f9107515030578e87f74e8a3986e79aa39d569f54a435",
+    "gaussian_renderer_sha256": "c71c89dfe3336960f6618205511f8c96bc5881a3c5551f39f2599e28f23aa3a6",
+    "changes": [
+      "rasterize only each layer's Gaussian subset",
+      "share one full-scene trace context between layer passes",
+      "return only render/alpha/depth/mask for formal video output"
+    ],
+    "frame_count": 60,
+    "elapsed_s": 7.63943993486464,
+    "effective_fps": 7.853978892637646,
+    "average_render_cuda_ms": 113.45860239664714,
+    "average_pipeline_ms": 125.15468783676626,
+    "average_bvh_ms": 7.812486557910839,
+    "average_output_ms": 1.2198662695785363,
+    "versus_previous": {
+      "elapsed_time_reduction_percent": 3.0579674261462464,
+      "throughput_increase_percent": 3.1544288323195335,
+      "render_cuda_time_reduction_percent": 4.339256869234706,
+      "pipeline_time_reduction_percent": 3.0468527916153074
+    },
+    "versus_original": {
+      "elapsed_time_reduction_percent": 32.232579895002154,
+      "throughput_increase_percent": 47.56353398884223
+    },
+    "three_frame_regression": {
+      "steps": [0, 1500, 3044],
+      "pixel_exact": true
+    },
+    "report": "/tmp/irgs_python_layer_opt_688_main_60/video_report.json"
   }
 }
